@@ -13,7 +13,7 @@ def get_connection():
         connection = mysql.connector.connect(
             host="localhost",         # hoặc IP nếu dùng remote DB
             user="root",              # thay bằng user của bạn
-            password="Stevetran99@", # thay bằng mật khẩu thật
+            password="******", # thay bằng mật khẩu thật
             database="unigap"  # tên database chứa bảng
         )
         if connection.is_connected():
