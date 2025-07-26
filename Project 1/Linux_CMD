@@ -1,0 +1,94 @@
+## 1. Sắp xếp các bộ phim theo ngày phát hành giảm dần rồi lưu ra một file mới
+
+"awk 'NR>=2 && NR<=4' tmdb-movies.csv | \
+awk 'BEGIN {
+  FPAT = ""([^,]+)|(\""[^\""]+\"")""; OFS = "",""
+}
+{
+  split($16, d, ""/"")
+  y = d[3]; if (length(y)==2) y = (y < 30 ? ""20"" y : ""19"" y)
+  m = sprintf(""%02d"", d[1])
+  da = sprintf(""%02d"", d[2])
+  iso_date = y ""-"" m ""-"" da
+  for (i = 1; i <= NF; i++) gsub(/^""|""$/, """", $i)
+  print iso_date ""|"" $0
+}' | sort -r -t'|' -k1 | cut -d '|' -f2-"
+
+
+## 2. Lọc ra các bộ phim có đánh giá trung bình trên 7.5 rồi lưu ra một file mới
+
+"# 1. Ghi header vào file kết quả
+head -n 1 tmdb-movies.csv > high_rated_movies.csv
+
+# 2. Lọc dòng có vote_average > 7.5 và nối vào file
+tail -n +2 tmdb-movies.csv | \
+awk 'BEGIN {
+  FPAT = ""([^,]+)|(\""[^\""]+\"")""    # Hỗ trợ CSV chứa dấu phẩy trong chuỗi
+}
+$18 > 7.5 { print $0 }' >> high_rated_movies.csv
+"
+3. Tìm ra phim nào có doanh thu cao nhất và doanh thu thấp nhất
+"tail -n +2 tmdb-movies.csv | \
+awk 'BEGIN {
+  FPAT = ""([^,]+)|(\""[^\""]+\"")""
+  max = -1; min = 1e20
+}
+{
+  rev = $5 + 0
+  if (rev > max) {
+    max = rev
+    max_title = $6
+  }
+  if (rev < min) {
+    min = rev
+    min_title = $6
+  }
+}
+END {
+  printf ""🎬 Max revenue: %s → $%.0f\n"", max_title, max
+  printf ""💸 Min revenue: %s → $%.0f\n"", min_title, min
+}'
+"
+
+
+4. Tính tổng doanh thu tất cả các bộ phim
+"# Bỏ dòng header, cộng dồn cột 5, in tổng
+tail -n +2 tmdb-movies.csv | \
+awk 'BEGIN {
+  FPAT = ""([^,]+)|(\""[^\""]+\"")""   # CSV-safe: không sợ dấu phẩy trong chuỗi
+  sum  = 0
+}
+{
+  sum += $5                       # $5 = revenue (USD)
+}
+END {
+  printf ""💰 Tổng doanh thu tất cả phim: $%.0f\n"", sum
+}'
+"
+
+
+5. Top 10 bộ phim đem về lợi nhuận cao nhất
+"############ 1) Thêm dòng header vào file kết quả ############
+head -n 1 tmdb-movies.csv > top10_profit.csv
+
+############ 2) Tính profit, sort giảm dần, lấy top 10 ########
+tail -n +2 tmdb-movies.csv | \
+awk 'BEGIN {
+  FPAT = ""([^,]+)|(\""[^\""]+\"")""          # CSV-safe
+}
+{
+  profit = $5 - $4                       # revenue – budget
+  print profit ""|"" $0                    # thêm cột profit tạm
+}' | \
+sort -t'|' -k1,1nr |                     # sort theo profit giảm dần
+head -n 10 | \
+cut -d'|' -f2- >> top10_profit.csv       # bỏ cột profit tạm, ghi kết quả
+"
+
+
+
+6. Đạo diễn nào có nhiều bộ phim nhất và diễn viên nào đóng nhiều phim nhất
+"tail -n +2 tmdb-movies.csv | \
+awk 'BEGIN { FPAT = ""([^,]+)|(\""[^\""]+\"")"" } { print $9 }' | \
+sort | uniq -c | sort -nr | head -n 10
+"
