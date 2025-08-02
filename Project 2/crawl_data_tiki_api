@@ -3,32 +3,33 @@ import requests
 import pandas as pd
 import time
 from bs4 import BeautifulSoup
+from pandas import json_normalize
 import re
 
-# url = 'https://api.tiki.vn/product-detail/api/v1/products/138083218'
-# C:\Users\cau.tran\DE-Unigap\Project 2\list_item.xlsx
-product_ids = ['1','138083218']
-# file_path = r'C:\Users\cau.tran\DE-Unigap\Project 2\list_item.csv'
+file_path = r'C:\Users\Windows\DE-Unigap\Project 2\list_item.csv'
 
-# #%% Lấy danh sách  product_id từ csv
-# def load_product_id_from_csv (file_path, column_name = 'id'):
-#     try:
-#         df = pd.read_csv(file_path)
-#         print(f"Số lượng product_id: {df['id'].count()}")
-#         product_ids = df['id'].tolist()  # Cột phải có tên là product_id
-#     except FileNotFoundError:
-#         print("❌ File không tồn tại. Kiểm tra lại đường dẫn.")
-#         return []
-#     except KeyError:
-#         print(f"❌ Không tìm thấy cột '{column_name}' trong file CSV.")
-#         return []
-#     except Exception as e:
-#         print(f"⚠️ Lỗi khi đọc file: {e}")
-#         return []
-# load_product_id_from_csv(file_path)
+#%% Lấy danh sách  product_id từ csv
+def load_product_id_from_csv (file_path, column_name = 'id',limit = 2): # Tùy chỉnh số lượng product load nếu load all thì đổi limit thành None
+    try:
+        df = pd.read_csv(file_path)
+        if limit is not None:
+            df = df.head(limit) 
+            print(f"Số lượng product_id: {df['id'].count()}")
+            print('Lấy danh sách product thành công')
+            return df['id'].tolist()  # Cột phải có tên là product_id
+    except FileNotFoundError:
+        print("❌ File không tồn tại. Kiểm tra lại đường dẫn.")
+        return []
+    except KeyError:
+        print(f"❌ Không tìm thấy cột '{column_name}' trong file CSV.")
+        return []
+    except Exception as e:
+        print(f"⚠️ Lỗi khi đọc file: {e}")
+        return []
 
 #%% Kết nối với API và get data về
-def crawl_product_info(pid, delay=0.5):
+def crawl_product_info(product_ids, delay=0.5):
+    print('Đang crawl data')
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json"
@@ -58,10 +59,8 @@ def crawl_product_info(pid, delay=0.5):
                     "error" : str(e)
                 })
         time.sleep(delay)
+    print('Crawl data thành công')
     return results
-product_list = crawl_product_info(pid)
-#%%
-product_list[1]
 
 #%% Trích ảnh từ description
 def extract_images_from_html(html):
@@ -71,31 +70,46 @@ def extract_images_from_html(html):
 #%% Trích ảnh từ description
 def standarize_description(html):
     soup = BeautifulSoup(html or "", "html.parser")
-    # Xóa ảnh nếu không cần (nếu cần giữ thì bỏ dòng này)
+    # Xóa ảnh
     for img in soup.find_all("img"):
         img.decompose()
+
+    for a in soup.find_all('a'):
+        a.decompose()
     # Lấy text
-    text = soup.get_text(separator=".")
-    # Xoá ký tự đặc biệt và strip từng dòng
-    # clean_lines = [line.strip() for line in text.splitlines() if line.strip()]
-    return text
+    clean_text = soup.get_text(separator=' ', strip=True).replace('\n', ' ').replace('\xa0', ' ')
 
-# %%
-# Các thông in cần lấy bao gồm: id, name, url_key, price, description, images url. 
-# Yêu cầu chuẩn hoá nội dung trong "description" 
+    clean_text = re.sub(r'\s+', ' ', clean_text)
+    return clean_text
 
+#%% Clean Data
+def transform_product_data(product_list):
+    prd_short_list = [{
+        'id': p.get('id'),
+        'name': p.get('name'),
+        'url_key': p.get('url_key'),
+        'description': standarize_description(p.get('description')),
+        'images_url': [img.get('base_url') for img in p.get('images', []) if img.get('base_url')],
+        'error': p.get('error')
+    } for p in product_list]
 
-prd_short_list = [{'id': p.get('id'), 
-                   'name':p.get('name'),
-                   'url_key':p.get ('url_key'),
-                   'description':standarize_description(p.get('description')),
-                   'images_url' :extract_images_from_html(p.get('description')),
-                   'error':p.get('error')
-                   } for p in product_list]
+    print(f"Cleaning Data is completed")
+    return prd_short_list
 
-prd_short_list
+#%% Lấy list product từ file csv
 
-# %%
+product_ids = load_product_id_from_csv(file_path, column_name = 'id',limit = 2)
 
-product_list[1].get('description')
+#%% Crawl thông tin product  về
+product_list = crawl_product_info(product_ids)
+product_list[0]
+
+#%% Clean data
+prd_short_list = transform_product_data(product_list)
+
+#%% Chuyển thành dataframe
+prd_df = json_normalize(prd_short_list)
+prd_df.head()
+# prd_df.to_excel(r'C:\Users\Windows\OneDrive\Desktop\check.xlsx') # Check data
+
 # %%
