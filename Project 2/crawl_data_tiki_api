@@ -1,0 +1,101 @@
+#%%
+import requests
+import pandas as pd
+import time
+from bs4 import BeautifulSoup
+import re
+
+# url = 'https://api.tiki.vn/product-detail/api/v1/products/138083218'
+# C:\Users\cau.tran\DE-Unigap\Project 2\list_item.xlsx
+product_ids = ['1','138083218']
+# file_path = r'C:\Users\cau.tran\DE-Unigap\Project 2\list_item.csv'
+
+# #%% Lấy danh sách  product_id từ csv
+# def load_product_id_from_csv (file_path, column_name = 'id'):
+#     try:
+#         df = pd.read_csv(file_path)
+#         print(f"Số lượng product_id: {df['id'].count()}")
+#         product_ids = df['id'].tolist()  # Cột phải có tên là product_id
+#     except FileNotFoundError:
+#         print("❌ File không tồn tại. Kiểm tra lại đường dẫn.")
+#         return []
+#     except KeyError:
+#         print(f"❌ Không tìm thấy cột '{column_name}' trong file CSV.")
+#         return []
+#     except Exception as e:
+#         print(f"⚠️ Lỗi khi đọc file: {e}")
+#         return []
+# load_product_id_from_csv(file_path)
+
+#%% Kết nối với API và get data về
+def crawl_product_info(pid, delay=0.5):
+    headers = {
+        "User-Agent": "Mozilla/5.0",
+        "Accept": "application/json"
+    }
+
+    results = []
+
+    for pid in product_ids:
+        url = f"https://api.tiki.vn/product-detail/api/v1/products/{pid}"
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                data['error'] = None
+                results.append(data)
+                print(f"✅ {pid} - OK")
+            else:
+                print(f"❌ Lỗi {response.status_code} - Not Found với ID {pid}")
+                results.append({
+                    "id" : pid,
+                    "error" : f"HTTP{response.status_code}"
+                })
+        except Exception as e:
+            print(f"⚠️ Lỗi không xác định với ID {pid}: {e}")
+            results.append({
+                    "id" : pid,
+                    "error" : str(e)
+                })
+        time.sleep(delay)
+    return results
+product_list = crawl_product_info(pid)
+#%%
+product_list[1]
+
+#%% Trích ảnh từ description
+def extract_images_from_html(html):
+    soup = BeautifulSoup(html or "", "html.parser")
+    return [img['src'] for img in soup.find_all('img') if img.get('src')]
+
+#%% Trích ảnh từ description
+def standarize_description(html):
+    soup = BeautifulSoup(html or "", "html.parser")
+    # Xóa ảnh nếu không cần (nếu cần giữ thì bỏ dòng này)
+    for img in soup.find_all("img"):
+        img.decompose()
+    # Lấy text
+    text = soup.get_text(separator=".")
+    # Xoá ký tự đặc biệt và strip từng dòng
+    # clean_lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return text
+
+# %%
+# Các thông in cần lấy bao gồm: id, name, url_key, price, description, images url. 
+# Yêu cầu chuẩn hoá nội dung trong "description" 
+
+
+prd_short_list = [{'id': p.get('id'), 
+                   'name':p.get('name'),
+                   'url_key':p.get ('url_key'),
+                   'description':standarize_description(p.get('description')),
+                   'images_url' :extract_images_from_html(p.get('description')),
+                   'error':p.get('error')
+                   } for p in product_list]
+
+prd_short_list
+
+# %%
+
+product_list[1].get('description')
+# %%
