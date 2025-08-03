@@ -18,7 +18,7 @@ def load_product_id_from_csv(file_path, limit=None, column_name='id'): # Tùy ch
             df = df.head(limit) 
             print(f"Số lượng product_id: {df['id'].count()}")
             print('Lấy danh sách product thành công')
-            return df['id'].tolist()  # Cột phải có tên là product_id
+        return df['id'].tolist()  # Cột phải có tên là product_id
     except FileNotFoundError:
         print("❌ File không tồn tại. Kiểm tra lại đường dẫn.")
         return []
