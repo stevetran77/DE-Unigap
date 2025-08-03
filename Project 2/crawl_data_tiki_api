@@ -4,12 +4,14 @@ import pandas as pd
 import time
 from bs4 import BeautifulSoup
 from pandas import json_normalize
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 import re
 
 file_path = r'C:\Users\Windows\DE-Unigap\Project 2\list_item.csv'
 
 #%% Lấy danh sách  product_id từ csv
-def load_product_id_from_csv (file_path, column_name = 'id',limit = 2): # Tùy chỉnh số lượng product load nếu load all thì đổi limit thành None
+def load_product_id_from_csv(file_path, limit=None, column_name='id'): # Tùy chỉnh số lượng product load nếu load all thì đổi limit thành None
     try:
         df = pd.read_csv(file_path)
         if limit is not None:
@@ -28,39 +30,40 @@ def load_product_id_from_csv (file_path, column_name = 'id',limit = 2): # Tùy c
         return []
 
 #%% Kết nối với API và get data về
-def crawl_product_info(product_ids, delay=0.5):
-    print('Đang crawl data')
+def fetch_product(pid):
+    url = f"https://api.tiki.vn/product-detail/api/v1/products/{pid}"
     headers = {
         "User-Agent": "Mozilla/5.0",
         "Accept": "application/json"
     }
+    try:
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            data['error'] = None
+            return data
+        else:
+            return {"id": pid, "error": f"HTTP {response.status_code}"}
+    except Exception as e:
+        return {"id": pid, "error": str(e)}
+
+def crawl_product_info(product_ids, max_workers=10):
+    print(f"Bắt đầu Crawl {len(product_ids)} sản phẩm...")
 
     results = []
+    start_time = time.time()
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_pid = {executor.submit(fetch_product, pid): pid for pid in product_ids}
+        for future in tqdm(as_completed(future_to_pid), total=len(future_to_pid), desc="📦 Crawling"):
+            result = future.result()
+            results.append(result)
 
-    for pid in product_ids:
-        url = f"https://api.tiki.vn/product-detail/api/v1/products/{pid}"
-        try:
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                data = response.json()
-                data['error'] = None
-                results.append(data)
-                print(f"✅ {pid} - OK")
-            else:
-                print(f"❌ Lỗi {response.status_code} - Not Found với ID {pid}")
-                results.append({
-                    "id" : pid,
-                    "error" : f"HTTP{response.status_code}"
-                })
-        except Exception as e:
-            print(f"⚠️ Lỗi không xác định với ID {pid}: {e}")
-            results.append({
-                    "id" : pid,
-                    "error" : str(e)
-                })
-        time.sleep(delay)
-    print('Crawl data thành công')
+    end_time = time.time()
+    duration = round(end_time - start_time, 2)
+    print(f"✅ Crawl hoàn tất trong {duration/60:.2f} phút)")
+    print("✅ Crawl xong!")
     return results
+
 
 #%% Trích ảnh từ description
 def extract_images_from_html(html):
@@ -98,7 +101,7 @@ def transform_product_data(product_list):
 
 #%% Lấy list product từ file csv
 
-product_ids = load_product_id_from_csv(file_path, column_name = 'id',limit = 2)
+product_ids = load_product_id_from_csv(file_path, limit = None ,column_name = 'id')
 
 #%% Crawl thông tin product  về
 product_list = crawl_product_info(product_ids)
